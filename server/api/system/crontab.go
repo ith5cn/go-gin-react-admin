@@ -48,3 +48,8 @@ func CrontabLogList(c *gin.Context) {
 	data, err := systemService.CrontabLogList(queryMap(c))
 	successOrFail(c, data, err)
 }
+
+// CrontabInternalTasks 返回已注册的系统内部任务目录。
+func CrontabInternalTasks(c *gin.Context) {
+	successOrFail(c, systemService.CrontabInternalTasks(), nil)
+}

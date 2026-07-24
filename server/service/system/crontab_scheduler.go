@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -35,14 +37,58 @@ var scheduler = &crontabScheduler{entries: map[uint]cron.EntryID{}}
 
 // crontabTaskRegistry 是"系统内部任务"注册表：target 填注册名即可被调度执行。
 // 新增内部任务用 RegisterCrontabTask 注册，不要直接改这个 map。
-var crontabTaskRegistry = map[string]func(parameter string) error{
-	"system/clean-logs": cleanExpiredLogs,
+type CrontabInternalTaskOption struct {
+	Label         string `json:"label"`
+	Value         string `json:"value"`
+	ParameterHint string `json:"parameterHint,omitempty"`
+}
+
+type crontabTaskDefinition struct {
+	option CrontabInternalTaskOption
+	run    func(parameter string) error
+}
+
+var crontabTaskRegistryMu sync.RWMutex
+var crontabTaskRegistry = map[string]crontabTaskDefinition{
+	"system/clean-logs": {
+		option: CrontabInternalTaskOption{Label: "清理过期日志", Value: "system/clean-logs", ParameterHint: `参数示例：{"days":30}，默认保留 30 天。`},
+		run:    cleanExpiredLogs,
+	},
 }
 
 // RegisterCrontabTask 注册一个系统内部任务。
 // name 是任务在 ai_tool_crontab.target 里填写的标识，fn 的入参是任务配置的 parameter 字符串。
 func RegisterCrontabTask(name string, fn func(parameter string) error) {
-	crontabTaskRegistry[name] = fn
+	RegisterCrontabTaskWithMetadata(name, name, "", fn)
+}
+
+// RegisterCrontabTaskWithMetadata 注册带界面展示信息的系统内部任务。
+func RegisterCrontabTaskWithMetadata(name, label, parameterHint string, fn func(parameter string) error) {
+	name = strings.TrimSpace(name)
+	if name == "" || fn == nil {
+		return
+	}
+	if strings.TrimSpace(label) == "" {
+		label = name
+	}
+	crontabTaskRegistryMu.Lock()
+	defer crontabTaskRegistryMu.Unlock()
+	crontabTaskRegistry[name] = crontabTaskDefinition{
+		option: CrontabInternalTaskOption{Label: label, Value: name, ParameterHint: parameterHint},
+		run:    fn,
+	}
+}
+
+// CrontabInternalTasks 返回前端可选择的内部任务目录。
+func CrontabInternalTasks() []CrontabInternalTaskOption {
+	crontabTaskRegistryMu.RLock()
+	defer crontabTaskRegistryMu.RUnlock()
+	options := make([]CrontabInternalTaskOption, 0, len(crontabTaskRegistry))
+	for _, definition := range crontabTaskRegistry {
+		options = append(options, definition.option)
+	}
+	sort.Slice(options, func(i, j int) bool { return options[i].Value < options[j].Value })
+	return options
 }
 
 // StartCrontabScheduler 启动定时任务调度器并装载所有启用状态的任务。
@@ -92,6 +138,10 @@ func (s *crontabScheduler) reloadLocked() error {
 			continue
 		}
 		// 闭包捕获循环变量的经典坑：复制一份再捕获，否则所有 entry 都指向最后一个 task。
+		if err := validateCrontabTarget(task); err != nil {
+			loggerInit.Logger.Get().Error("skip invalid crontab target", zap.Uint("id", task.ID), zap.Error(err))
+			continue
+		}
 		taskCopy := task
 		entryID, err := s.cron.AddFunc(*task.Rule, func() {
 			executeCrontab(taskCopy, true)
@@ -150,8 +200,8 @@ func runCrontabTarget(task systemModel.AIToolCrontab) error {
 	if task.Target != nil {
 		target = strings.TrimSpace(*task.Target)
 	}
-	if target == "" {
-		return fmt.Errorf("任务未配置调用目标")
+	if err := validateCrontabTarget(task); err != nil {
+		return err
 	}
 	parameter := ""
 	if task.Parameter != nil {
@@ -162,19 +212,45 @@ func runCrontabTarget(task systemModel.AIToolCrontab) error {
 		return runHTTPTask(target, parameter)
 	}
 
-	fn, ok := crontabTaskRegistry[target]
+	crontabTaskRegistryMu.RLock()
+	definition, ok := crontabTaskRegistry[target]
+	crontabTaskRegistryMu.RUnlock()
 	if !ok {
-		return fmt.Errorf("未注册的内部任务: %s", target)
+		return ErrCrontabTaskUnknown
 	}
-	return fn(parameter)
+	return definition.run(parameter)
+}
+
+func validateCrontabTarget(task systemModel.AIToolCrontab) error {
+	target := strings.TrimSpace(stringValue(task.Target))
+	if target == "" {
+		return ErrCrontabTargetRequired
+	}
+	if task.TaskStyle == nil {
+		return ErrCrontabStyleInvalid
+	}
+	switch *task.TaskStyle {
+	case 1:
+		crontabTaskRegistryMu.RLock()
+		_, ok := crontabTaskRegistry[target]
+		crontabTaskRegistryMu.RUnlock()
+		if !ok {
+			return ErrCrontabTaskUnknown
+		}
+		return nil
+	case 2:
+		parsed, err := url.ParseRequestURI(target)
+		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return ErrCrontabURLInvalid
+		}
+		return nil
+	default:
+		return ErrCrontabStyleInvalid
+	}
 }
 
 // runHTTPTask 执行 HTTP 类型任务：有参数则 POST JSON，无参数则 GET，2xx/3xx 视为成功。
 func runHTTPTask(url string, parameter string) error {
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		return fmt.Errorf("HTTP 任务的调用目标必须是 http(s) URL")
-	}
-
 	client := &http.Client{Timeout: 15 * time.Second}
 	var resp *http.Response
 	var err error

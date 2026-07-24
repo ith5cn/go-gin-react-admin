@@ -117,7 +117,7 @@ const GencodeColumns = ({ data, onChange, dictTypeOptions, componentOptions, opt
   ];
 
   return (
-    <>
+    <div  className="h-[calc(100vh-180px)] overflow-auto">
       <Table rowKey={(record) => String(record.id ?? record.column_name)} columns={columns} dataSource={data} pagination={false} scroll={{ x: 1850 }} />
       <OptionConfigModal
         open={configIndex !== null}
@@ -129,7 +129,7 @@ const GencodeColumns = ({ data, onChange, dictTypeOptions, componentOptions, opt
           setConfigIndex(null);
         }}
       />
-    </>
+    </div>
   );
 };
 

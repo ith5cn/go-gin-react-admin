@@ -12,4 +12,5 @@ func logRoutes(system *gin.RouterGroup) {
 	system.GET("/login-log/index", middleware.Perm("system/login-log/index"), systemApi.LoginLogList)
 	system.DELETE("/login-log/:id", middleware.Perm("system/login-log/destroy"), systemApi.LoginLogDelete)
 	system.GET("/oper-log/index", middleware.Perm("system/oper-log/index"), systemApi.OperLogList)
+	system.DELETE("/oper-log/:id", middleware.Perm("system/oper-log/destroy"), systemApi.OperLogDelete)
 }

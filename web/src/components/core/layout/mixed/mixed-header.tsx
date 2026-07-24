@@ -11,7 +11,7 @@ type MixedHeaderProps = {
 
 export const MixedHeader = ({ topMenus, activeTopKey, onTopMenuChange }: MixedHeaderProps) => {
   const siteConfig = useAppStore((state) => state.siteConfig)
-  const title = siteConfig?.site_name || siteConfig?.name || 'Nest Admin'
+  const title = siteConfig?.site_name || siteConfig?.name || 'Ith5 Console'
 
   return (
     <div className="shrink-0 border-b border-slate-200 bg-white">

@@ -24,6 +24,12 @@ func ensureAISystemSchema(db *gorm.DB) error {
 	if err := ensureLoginLogSchema(db); err != nil {
 		return err
 	}
+	if err := ensureOperLogSchema(db); err != nil {
+		return err
+	}
+	if err := ensureCrontabSeedData(db); err != nil {
+		return err
+	}
 
 	if err := db.Exec(`
 CREATE TABLE IF NOT EXISTS nest_tool_generate_tables (
@@ -140,6 +146,81 @@ func ensureLoginLogSchema(db *gorm.DB) error {
 		return err
 	}
 	return db.Exec("UPDATE ai_system_menu SET level = '0,3000,3300,3400' WHERE code = 'system/login-log/destroy'").Error
+}
+
+// ensureOperLogSchema 创建或升级操作日志表，并修正旧菜单路径。
+func ensureOperLogSchema(db *gorm.DB) error {
+	if err := db.Exec(`
+CREATE TABLE IF NOT EXISTS ai_system_oper_log (
+  id int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键',
+  app varchar(50) NULL DEFAULT NULL COMMENT '应用名称',
+  method varchar(10) NULL DEFAULT NULL COMMENT '请求方式',
+  request_data text NULL COMMENT '请求数据',
+  status_code smallint unsigned NOT NULL DEFAULT 0 COMMENT 'HTTP状态码',
+  duration_ms bigint unsigned NOT NULL DEFAULT 0 COMMENT '请求耗时(毫秒)',
+  remark varchar(255) NULL DEFAULT NULL COMMENT '备注',
+  username varchar(50) NULL DEFAULT NULL COMMENT '操作用户',
+  service_name varchar(100) NULL DEFAULT NULL COMMENT '业务名称',
+  router varchar(255) NULL DEFAULT NULL COMMENT '请求路由',
+  ip varchar(45) NULL DEFAULT NULL COMMENT '操作IP',
+  ip_location varchar(255) NULL DEFAULT NULL COMMENT 'IP所属地',
+  created_by int NULL DEFAULT NULL COMMENT '创建者',
+  updated_by int NULL DEFAULT NULL COMMENT '更新者',
+  create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '操作时间',
+  update_time datetime NULL DEFAULT NULL COMMENT '更新时间',
+  PRIMARY KEY (id),
+  KEY idx_oper_create_time (create_time),
+  KEY idx_oper_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='操作日志表';
+`).Error; err != nil {
+		return err
+	}
+	if !db.Migrator().HasColumn("ai_system_oper_log", "status_code") {
+		if err := db.Exec("ALTER TABLE ai_system_oper_log ADD COLUMN status_code smallint unsigned NOT NULL DEFAULT 0 COMMENT 'HTTP状态码' AFTER request_data").Error; err != nil {
+			return err
+		}
+	}
+	if !db.Migrator().HasColumn("ai_system_oper_log", "duration_ms") {
+		if err := db.Exec("ALTER TABLE ai_system_oper_log ADD COLUMN duration_ms bigint unsigned NOT NULL DEFAULT 0 COMMENT '请求耗时(毫秒)' AFTER status_code").Error; err != nil {
+			return err
+		}
+	}
+	if err := db.Exec("UPDATE ai_system_oper_log SET ip_location = '本机' WHERE (ip_location IS NULL OR ip_location = '') AND ip IN ('127.0.0.1', '::1')").Error; err != nil {
+		return err
+	}
+	if err := db.Exec("UPDATE ai_system_menu SET component = 'system/oper-log/index' WHERE component = 'system/logs/operLog'").Error; err != nil {
+		return err
+	}
+	return db.Exec("UPDATE ai_system_menu SET level = '0,3000,3300,3500' WHERE code = 'system/oper-log/destroy'").Error
+}
+
+// ensureCrontabSeedData 修正旧种子任务的执行类型和已废弃的插件目标。
+// 更新同时匹配固定 ID 与原目标，避免覆盖用户后来创建或修改的任务。
+func ensureCrontabSeedData(db *gorm.DB) error {
+	if !db.Migrator().HasTable("ai_tool_crontab") {
+		return nil
+	}
+	homeTargets := []string{"https://saithink.top", "https://ith5.top"}
+	for _, target := range homeTargets {
+		if err := db.Exec("UPDATE ai_tool_crontab SET task_style = 2, update_time = NOW() WHERE id = 1 AND task_style = 1 AND target = ?", target).Error; err != nil {
+			return err
+		}
+	}
+	if err := db.Exec("UPDATE ai_tool_crontab SET task_style = 2, update_time = NOW() WHERE id = 2 AND task_style = 1 AND target = ?", "https://gitee.com/check_user_login").Error; err != nil {
+		return err
+	}
+	legacyTargets := []string{`\plugin\saiadmin\process\Test`, `\plugin\Ith5 Console\process\Test`}
+	for _, target := range legacyTargets {
+		if err := db.Exec(`UPDATE ai_tool_crontab
+SET name = ?, target = ?, parameter = ?, task_style = 1, status = 2,
+    remark = ?, update_time = NOW()
+WHERE id = 3 AND task_style = 1 AND target = ?`,
+			"清理过期日志", "system/clean-logs", `{"days":30}`,
+			"内置任务示例，启用前请确认日志保留天数", target).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ensureRoleDeptTable 创建角色-部门关联表（自定义数据权限用），幂等。

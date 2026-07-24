@@ -68,8 +68,8 @@ const createIframeElement = (routePath: string) => (
 const flattenRouteNodes = (menuTree: NormalizedMenuNode[]): NormalizedMenuNode[] => {
   return menuTree.flatMap((menuNode) => {
     const isPageRoute =
-      menuNode.meta.type === 'M' && menuNode.meta.layout && menuNode.path && menuNode.component
-    const isIframeRoute = menuNode.meta.type === 'I' && menuNode.meta.layout && menuNode.path
+      menuNode.meta.type === 'M' && menuNode.path && menuNode.component
+    const isIframeRoute = menuNode.meta.type === 'I' && menuNode.path
     const currentNode = isPageRoute || isIframeRoute ? [menuNode] : []
 
     if (menuNode.children?.length) {
@@ -96,6 +96,7 @@ export const transformMenuToRoutes = (menuTree: NormalizedMenuNode[]): AppRouteO
           title: menuNode.meta.title,
           icon: menuNode.meta.icon,
           hidden: menuNode.meta.hidden,
+          layout: menuNode.meta.layout,
           hiddenBreadcrumb: menuNode.meta.hiddenBreadcrumb,
           type: menuNode.meta.type,
           backendComponent: menuNode.component,
@@ -129,6 +130,7 @@ export const transformMenuToSiderItems = (menuTree: NormalizedMenuNode[]): AppMe
           icon: resolveMenuIcon(menuNode.meta.icon),
           hidden: menuNode.meta.hidden,
           external: menuNode.meta.external,
+          target: menuNode.meta.target,
           children,
         },
       ]
@@ -146,6 +148,7 @@ export const transformMenuToSiderItems = (menuTree: NormalizedMenuNode[]): AppMe
         icon: resolveMenuIcon(menuNode.meta.icon),
         hidden: menuNode.meta.hidden,
         external: menuNode.meta.external,
+        target: menuNode.meta.target,
       },
     ]
   })

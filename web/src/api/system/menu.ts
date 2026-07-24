@@ -18,6 +18,7 @@ export interface MenuFormData {
     sort: number
     isHidden: number
     isLayout: number
+    isTarget: number
     status: number
     remark?: string
 }

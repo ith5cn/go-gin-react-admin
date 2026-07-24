@@ -22,3 +22,8 @@ func OperLogList(c *gin.Context) {
 	result, err := systemService.OperLogList(queryMap(c))
 	successOrFail(c, result, err)
 }
+
+// OperLogDelete 删除操作日志。
+func OperLogDelete(c *gin.Context) {
+	successOrFail(c, map[string]interface{}{}, systemService.OperLogDelete(c.Param("id")))
+}

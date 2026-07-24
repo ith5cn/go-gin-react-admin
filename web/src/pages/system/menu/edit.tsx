@@ -58,6 +58,7 @@ const initialFormData: MenuFormData = {
   sort: 100,
   isHidden: 2,
   isLayout: 1,
+  isTarget: 2,
   status: 1,
   remark: "",
 };
@@ -258,13 +259,23 @@ const MenuEdit = forwardRef<MenuEditRef, MenuEditProps>(
           )}
 
           {menuType !== "B" && (
-            <Form.Item label="继承Layout" name="isLayout">
-              <Radio.Group
-                options={yesOrNoOptions}
-                optionType="button"
-                buttonStyle="solid"
-              />
-            </Form.Item>
+            <>
+              <Form.Item label="继承Layout" name="isLayout">
+                <Radio.Group
+                  options={yesOrNoOptions}
+                  optionType="button"
+                  buttonStyle="solid"
+                />
+              </Form.Item>
+              <Form.Item label="新窗口打开" name="isTarget">
+                <Radio.Group
+                  options={yesOrNoOptions}
+                  optionType="button"
+                  buttonStyle="solid"
+                />
+              </Form.Item>
+            </>
+
           )}
 
           <Form.Item label="状态" name="status">

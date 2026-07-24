@@ -14,6 +14,7 @@ export type RawBackendMenuNode = {
   redirect?: string | null
   isHidden: number
   isLayout: number
+  isTarget?: number
   type: MenuType
   status?: number
   sort?: number
@@ -25,6 +26,7 @@ export type NormalizedMenuMeta = {
   type: MenuType
   hidden: boolean
   layout: boolean
+  target: boolean
   hiddenBreadcrumb: boolean
   icon?: string
   external?: boolean
@@ -45,6 +47,7 @@ export type AppRouteMeta = {
   title: string
   icon?: string
   hidden?: boolean
+  layout?: boolean
   keepAlive?: boolean
   affix?: boolean
   type?: string
@@ -59,6 +62,7 @@ export type AppMenuItem = {
   icon?: ReactNode
   hidden?: boolean
   external?: boolean
+  target?: boolean
   children?: AppMenuItem[]
 }
 

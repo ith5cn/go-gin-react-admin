@@ -15,4 +15,5 @@ func crontabRoutes(system *gin.RouterGroup) {
 	system.DELETE("/crontab/:id", middleware.Perm("system/crontab/destroy"), systemApi.DeleteCrontab)
 	system.POST("/crontab/run/:id", middleware.Perm("system/crontab/run"), systemApi.RunCrontab)
 	system.GET("/crontab/log/index", middleware.Perm("system/crontab/index"), systemApi.CrontabLogList)
+	system.GET("/crontab/internal-tasks", middleware.Perm("system/crontab/index"), systemApi.CrontabInternalTasks)
 }

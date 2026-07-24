@@ -60,6 +60,11 @@ const ClassicSiderMenu = ({ collapsed, pathname, sideMenuItems }: ClassicSiderMe
       return
     }
 
+    if (targetItem?.target) {
+      window.open(targetItem.path || selectedItemKey, '_blank')
+      return
+    }
+
     navigate(targetItem?.path || selectedItemKey)
   }
 

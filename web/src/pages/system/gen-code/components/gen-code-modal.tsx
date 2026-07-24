@@ -243,19 +243,21 @@ const GencodeModal = forwardRef<GencodeModalRef, GencodeModalProps>(({ onSuccess
       {
         key: "1",
         label: "配置信息",
-        children: <GencodeSetting form={form} menuTree={menuTree} />,
+        children: <div className="h-[calc(100vh-180px)]"><GencodeSetting form={form} menuTree={menuTree} /></div>,
       },
       {
         key: "2",
         label: "字段配置",
         children: (
-          <GencodeColumns
-            data={columns}
-            onChange={setColumns}
-            dictTypeOptions={dictTypeOptions}
-            componentOptions={componentOptions}
-            optionRoutes={optionRoutes}
-          />
+          <div>
+            <GencodeColumns
+              data={columns}
+              onChange={setColumns}
+              dictTypeOptions={dictTypeOptions}
+              componentOptions={componentOptions}
+              optionRoutes={optionRoutes}
+            />
+          </div>
         ),
       },
     ],
@@ -327,6 +329,7 @@ const GencodeModal = forwardRef<GencodeModalRef, GencodeModalProps>(({ onSuccess
         title={`编辑生成信息 - ${title}`}
         open={isModalOpen}
         width="100%"
+        style={{ top: 0, height: "100vh", maxWidth: "100vw" }}
         onCancel={() => setIsModalOpen(false)}
         footer={[
           <Button key="cancel" onClick={() => setIsModalOpen(false)}>

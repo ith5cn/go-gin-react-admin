@@ -56,6 +56,11 @@ export const MixedSider = ({ menuItems, pathname }: MixedSiderProps) => {
       return
     }
 
+    if (targetItem?.target) {
+      window.open(targetItem.path || selectedItemKey, '_blank')
+      return
+    }
+
     navigate(targetItem?.path || selectedItemKey)
   }
 

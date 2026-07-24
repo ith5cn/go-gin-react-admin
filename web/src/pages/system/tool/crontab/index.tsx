@@ -7,6 +7,8 @@ import { useRef } from "react";
 import CrontabEdit, { type CrontabEditRef } from "./edit";
 import CrontabLog, { type CrontabLogRef } from "./log";
 
+type CrontabRecord = Record<string, unknown> & { id: number | string };
+
 export default function Crontab() {
     const tableRef = useRef<TableRef>(null);
     const editRef = useRef<CrontabEditRef>(null);
@@ -22,12 +24,12 @@ export default function Crontab() {
         edit: {
             show: true,
             auth: ["system/crontab/update"],
-            func: (record: any) => editRef.current?.open("edit", record),
+            func: (record: CrontabRecord) => editRef.current?.open("edit", record),
         },
         delete: {
             show: true,
             auth: ["system/crontab/destroy"],
-            func: async (record: any) => {
+            func: async (record: CrontabRecord) => {
                 const res = await crontabDeleteApi(record.id);
                 if (res.code === 0) {
                     message.success('删除成功');
@@ -74,6 +76,17 @@ export default function Crontab() {
                         key: 'type',
                         type: 'dict',
                         dict: 'crontab_type'
+                    },
+                    {
+                        title: '执行类型',
+                        dataIndex: 'taskStyle',
+                        key: 'taskStyle',
+                        render: (value: number | string) => Number(value) === 2 ? 'HTTP 请求任务' : '系统内部任务',
+                    },
+                    {
+                        title: '调用目标',
+                        dataIndex: 'target',
+                        key: 'target',
                     },
                     {
                         title: 'Cron表达式',

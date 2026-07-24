@@ -31,6 +31,8 @@ type AISystemOperLog struct {
 	App         *string    `json:"app" gorm:"column:app"`
 	Method      *string    `json:"method" gorm:"column:method"`
 	RequestData *string    `json:"requestData" gorm:"column:request_data"`
+	StatusCode  int        `json:"statusCode" gorm:"column:status_code"`
+	DurationMS  int64      `json:"durationMs" gorm:"column:duration_ms"`
 	Remark      *string    `json:"remark" gorm:"column:remark"`
 	Username    *string    `json:"username" gorm:"column:username"`
 	ServiceName *string    `json:"serviceName" gorm:"column:service_name"`

@@ -26,6 +26,10 @@ func CreateCrontab(payload systemRequest.CrontabPayload) (*systemModel.AIToolCro
 			return nil, err
 		}
 	}
+	candidate := mergeCrontabPayload(systemModel.AIToolCrontab{}, payload)
+	if err := validateCrontabTarget(candidate); err != nil {
+		return nil, err
+	}
 	task, err := createRow[systemModel.AIToolCrontab]("ai_tool_crontab", crontabPayloadData(payload))
 	if err != nil {
 		return nil, err
@@ -40,6 +44,13 @@ func UpdateCrontab(id string, payload systemRequest.CrontabPayload) (*systemMode
 		if err := validateCrontabRule(*payload.Rule); err != nil {
 			return nil, err
 		}
+	}
+	current, err := crontabByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateCrontabTarget(mergeCrontabPayload(*current, payload)); err != nil {
+		return nil, err
 	}
 	task, err := updateRow[systemModel.AIToolCrontab]("ai_tool_crontab", id, crontabPayloadData(payload))
 	if err != nil {
@@ -62,6 +73,9 @@ func DeleteCrontab(id string) error {
 func RunCrontabOnce(id string) error {
 	task, err := crontabByID(id)
 	if err != nil {
+		return err
+	}
+	if err := validateCrontabTarget(*task); err != nil {
 		return err
 	}
 	go executeCrontab(*task, false)
@@ -91,6 +105,16 @@ func crontabByID(id string) (*systemModel.AIToolCrontab, error) {
 		return nil, err
 	}
 	return &task, nil
+}
+
+func mergeCrontabPayload(task systemModel.AIToolCrontab, payload systemRequest.CrontabPayload) systemModel.AIToolCrontab {
+	if payload.Target != nil {
+		task.Target = payload.Target
+	}
+	if payload.TaskStyle != nil {
+		task.TaskStyle = payload.TaskStyle.Int16Ptr()
+	}
+	return task
 }
 
 // crontabPayloadData 把类型化入参转成 GORM 更新 map，nil 字段跳过（部分更新）。

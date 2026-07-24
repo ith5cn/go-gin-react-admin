@@ -1,11 +1,16 @@
-import { forwardRef, useImperativeHandle, useState } from "react";
-import { Form, Input, message, Modal, Radio, Row, Col } from "antd";
-import { crontabCreateApi, crontabUpdateApi } from "@/api/system/crontab";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { Col, Form, Input, message, Modal, Radio, Row, Select } from "antd";
+import {
+    crontabCreateApi,
+    crontabInternalTasksApi,
+    crontabUpdateApi,
+    type CrontabInternalTaskOption,
+} from "@/api/system/crontab";
 import Ith5Select from "@/components/ith5ui/ith5-select";
 
 export interface CrontabEditRef {
-    open: (type?: 'add' | 'edit', data?: Record<string, any>) => void;
-    setFormData: (data: Record<string, any>) => void;
+    open: (type?: 'add' | 'edit', data?: Record<string, unknown>) => void;
+    setFormData: (data: Record<string, unknown>) => void;
 }
 
 interface CrontabEditProps {
@@ -38,16 +43,48 @@ const initialFormData: CrontabFormData = {
     remark: '',
 };
 
+const validateHttpTarget = (_: unknown, value?: string) => {
+    if (!value) return Promise.resolve();
+    try {
+        const parsed = new URL(value);
+        if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.host) {
+            return Promise.resolve();
+        }
+    } catch {
+        // Return the shared form validation error below.
+    }
+    return Promise.reject(new Error('请输入包含主机名的 http:// 或 https:// 地址'));
+};
+
 const CrontabEdit = forwardRef<CrontabEditRef, CrontabEditProps>(({ onSuccess }, ref) => {
     const [visible, setVisible] = useState(false);
     const [mode, setMode] = useState<'add' | 'edit'>('add');
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
+    const [internalTasks, setInternalTasks] = useState<CrontabInternalTaskOption[]>([]);
+    const taskStyleValue = Form.useWatch("taskStyle", form);
+    const targetValue = Form.useWatch("target", form);
+    const taskStyle = Number(taskStyleValue || 1);
+    const selectedInternalTask = internalTasks.find((item) => item.value === targetValue);
+
+    useEffect(() => {
+        let active = true;
+        crontabInternalTasksApi()
+            .then((response) => {
+                if (active) {
+                    setInternalTasks((response.data || []) as CrontabInternalTaskOption[]);
+                }
+            })
+            .catch(() => undefined);
+        return () => {
+            active = false;
+        };
+    }, []);
 
     const title = '任务管理' + (mode === 'edit' ? ' - 编辑' : ' - 新增');
 
     // 打开弹框
-    const open = (type: 'add' | 'edit' = 'add', data?: Record<string, any>) => {
+    const open = (type: 'add' | 'edit' = 'add', data?: Record<string, unknown>) => {
         setMode(type);
         form.resetFields();
         if (type === 'edit' && data) {
@@ -59,7 +96,7 @@ const CrontabEdit = forwardRef<CrontabEditRef, CrontabEditProps>(({ onSuccess },
     };
 
     // 设置表单数据
-    const setFormData = (data: Record<string, any>) => {
+    const setFormData = (data: Record<string, unknown>) => {
         form.setFieldsValue(data);
     };
 
@@ -81,8 +118,10 @@ const CrontabEdit = forwardRef<CrontabEditRef, CrontabEditProps>(({ onSuccess },
             message.success('操作成功');
             onSuccess?.();
             close();
-        } catch (error: any) {
-            if (error?.errorFields) return;
+        } catch (error: unknown) {
+            if (typeof error === 'object' && error !== null && 'errorFields' in error) {
+                return;
+            }
         } finally {
             setLoading(false);
         }
@@ -145,27 +184,37 @@ const CrontabEdit = forwardRef<CrontabEditRef, CrontabEditProps>(({ onSuccess },
                     </Col>
                     <Col span={24}>
                         <Form.Item
-                            name="target"
-                            label="调用目标"
-                            labelCol={{ span: 4 }}
-                            wrapperCol={{ span: 20 }}
-                            rules={[{ required: true, message: '请输入调用目标' }]}
-                        >
-                            <Input placeholder="请输入调用目标字符串" />
-                        </Form.Item>
-                    </Col>
-                    <Col span={24}>
-                        <Form.Item
                             name="taskStyle"
                             label="执行类型"
                             labelCol={{ span: 4 }}
                             wrapperCol={{ span: 20 }}
                             rules={[{ required: true, message: '请选择执行类型' }]}
                         >
-                            <Radio.Group>
+                            <Radio.Group onChange={() => form.setFieldValue("target", undefined)}>
                                 <Radio value={1}>系统内部任务</Radio>
                                 <Radio value={2}>HTTP 请求任务</Radio>
                             </Radio.Group>
+                        </Form.Item>
+                    </Col>
+                    <Col span={24}>
+                        <Form.Item
+                            name="target"
+                            label="调用目标"
+                            labelCol={{ span: 4 }}
+                            wrapperCol={{ span: 20 }}
+                            extra={<span aria-live="polite">{taskStyle === 1 ? "请选择后端已注册的 Go 内部任务。" : "请输入完整的 http:// 或 https:// 地址。"}</span>}
+                            rules={taskStyle === 2
+                                ? [
+                                    { required: true, message: '请输入 HTTP 请求地址' },
+                                    { validator: validateHttpTarget },
+                                ]
+                                : [{ required: true, message: '请选择系统内部任务' }]}
+                        >
+                            {taskStyle === 1 ? (
+                                <Select showSearch optionFilterProp="label" options={internalTasks} placeholder="请选择系统内部任务" />
+                            ) : (
+                                <Input type="url" placeholder="例如：https://example.com/jobs/sync" />
+                            )}
                         </Form.Item>
                     </Col>
                     <Col span={24}>
@@ -174,6 +223,11 @@ const CrontabEdit = forwardRef<CrontabEditRef, CrontabEditProps>(({ onSuccess },
                             label="目标参数"
                             labelCol={{ span: 4 }}
                             wrapperCol={{ span: 20 }}
+                            extra={taskStyle === 1 && selectedInternalTask?.parameterHint
+                                ? <span aria-live="polite">{selectedInternalTask.parameterHint}</span>
+                                : taskStyle === 2
+                                    ? "参数非空时使用 POST JSON，为空时使用 GET。"
+                                    : undefined}
                         >
                             <Input.TextArea placeholder="请输入调用任务参数 (JSON格式)" rows={2} />
                         </Form.Item>

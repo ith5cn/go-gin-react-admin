@@ -27,6 +27,7 @@ export const normalizeBackendMenuNode = (menuNode: RawBackendMenuNode): Normaliz
       type: menuNode.type,
       hidden: menuNode.isHidden === 1,
       layout: menuNode.isLayout === 1,
+      target: menuNode.isTarget === 1,
       hiddenBreadcrumb: false,
       icon: menuNode.icon ?? undefined,
       external: isExternal,

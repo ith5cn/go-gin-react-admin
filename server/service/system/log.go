@@ -32,7 +32,21 @@ func LoginLogDelete(id string) error {
 // OperLogList 分页查询操作日志，按 id 倒序。
 func OperLogList(query map[string]string) (*commonResponse.PageResult, error) {
 	var data []systemModel.AISystemOperLog
-	return pageList(query, &systemModel.AISystemOperLog{}, &data, map[string]string{"username": "username", "serviceName": "service_name", "router": "router", "ip": "ip"}, map[string]string{}, "id DESC")
+	filters := []QueryFilter{
+		{Param: "username", Column: "username", Op: "like"},
+		{Param: "method", Column: "method", Op: "eq"},
+		{Param: "serviceName", Column: "service_name", Op: "like"},
+		{Param: "router", Column: "router", Op: "like"},
+		{Param: "ip", Column: "ip", Op: "like"},
+		{Param: "statusCode", Column: "status_code", Op: "eq"},
+		{Param: "createTime", Column: "create_time", Op: "between"},
+	}
+	return PageListFiltered(query, &systemModel.AISystemOperLog{}, &data, filters, nil, "id DESC", false)
+}
+
+// OperLogDelete 删除指定操作日志。操作日志不提供新增和编辑入口。
+func OperLogDelete(id string) error {
+	return deleteByID(&systemModel.AISystemOperLog{}, id)
 }
 
 // RecordLoginLog 写一条登录日志。
@@ -69,13 +83,14 @@ func RecordLoginLog(username, ip, userAgent string, success bool, message string
 
 // RecordOperLog 写一条操作日志，由操作日志中间件在写类请求完成后调用。
 // 与登录日志一样尽力而为，不返回 error。
-func RecordOperLog(username, method, router, serviceName, ip, requestData string) {
+func RecordOperLog(username, method, router, serviceName, ip, requestData string, statusCode int, durationMS int64) {
 	db, err := systemDB()
 	if err != nil {
 		loggerInit.Logger.Get().Error("record oper log failed", zap.Error(err))
 		return
 	}
 
+	now := time.Now()
 	location := loginIPLocation(ip)
 	entry := systemModel.AISystemOperLog{
 		App:         ptrString("backend"),
@@ -86,6 +101,9 @@ func RecordOperLog(username, method, router, serviceName, ip, requestData string
 		IP:          ptrString(ip),
 		IPLocation:  ptrString(location),
 		RequestData: ptrString(requestData),
+		StatusCode:  statusCode,
+		DurationMS:  durationMS,
+		CreateTime:  &now,
 	}
 	if err := db.Create(&entry).Error; err != nil {
 		loggerInit.Logger.Get().Error("record oper log failed", zap.Error(err))

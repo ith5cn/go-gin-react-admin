@@ -16,6 +16,7 @@ type AISystemMenu struct {
 	Redirect    *string         `json:"redirect" gorm:"column:redirect"`        // 跳转地址。
 	IsHidden    int16           `json:"isHidden" gorm:"column:is_hidden"`       // 是否隐藏：1 是，2 否。
 	IsLayout    uint8           `json:"isLayout" gorm:"column:is_layout"`       // 是否继承 layout：1 是，2 否。
+	IsTarget    uint8           `json:"isTarget" gorm:"column:is_target"`       // 是否新窗口打开：1 是，2 否。
 	Type        string          `json:"type" gorm:"column:type"`                // 菜单类型：M/B/L/I。
 	GenerateID  *int            `json:"generateId" gorm:"column:generate_id"`   // 代码生成ID。
 	GenerateKey *string         `json:"generateKey" gorm:"column:generate_key"` // 代码生成标识。

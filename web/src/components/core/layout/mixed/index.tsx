@@ -42,7 +42,7 @@ export const MixedLayout = () => {
   const activeTopMenu = selectedTopMenu ?? routedTopMenu
 
   const handleTopMenuChange = (menuItem: AppMenuItem) => {
-    if (menuItem.external) {
+    if (menuItem.external || menuItem.target) {
       window.open(menuItem.path, '_blank')
       return
     }
