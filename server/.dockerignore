@@ -1,0 +1,11 @@
+.env
+.git
+.gitignore
+runtime
+*.log
+*.test
+*.exe
+.gocache
+.tmp-*
+coverage.out
+LEARNING.md

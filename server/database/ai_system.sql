@@ -390,7 +390,6 @@ CREATE TABLE `ai_system_menu`  (
   `redirect` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT NULL COMMENT '跳转地址',
   `is_hidden` smallint NULL DEFAULT 1 COMMENT '是否隐藏 (1是 2否)',
   `is_layout` tinyint UNSIGNED NULL DEFAULT 1 COMMENT '继承layout',
-  `is_target` tinyint UNSIGNED NULL DEFAULT 1 COMMENT '新窗口打开 (1是 2否)',
   `type` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT '' COMMENT '菜单类型, (M菜单 B按钮 L链接 I iframe)',
   `generate_id` int NULL DEFAULT 0 COMMENT '生成id',
   `generate_key` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT NULL COMMENT '生成key',
@@ -522,6 +521,11 @@ INSERT INTO `ai_system_menu` VALUES (6267, 6265, NULL, '新增', 'system/ai-arti
 INSERT INTO `ai_system_menu` VALUES (6268, 6265, NULL, '编辑', 'system/ai-article/update', '', '', '', NULL, 1, 1, 'B', 0, NULL, 1, 30, NULL, NULL, NULL, '2026-06-18 19:11:48', '2026-06-18 19:11:48', NULL);
 INSERT INTO `ai_system_menu` VALUES (6269, 6265, NULL, '删除', 'system/ai-article/destroy', '', '', '', NULL, 1, 1, 'B', 0, NULL, 1, 40, NULL, NULL, NULL, '2026-06-18 19:11:48', '2026-06-18 19:11:48', NULL);
 INSERT INTO `ai_system_menu` VALUES (6270, 5000, '0,5000', '配置管理', 'setting', 'SettingOutlined', 'setting', 'system/config/index', NULL, 2, 1, 'M', 0, NULL, 1, 100, '', NULL, NULL, '2026-07-21 02:29:16', '2026-07-21 02:31:58', NULL);
+
+-- Seed rows above come from the schema version before is_target was added.
+-- Add the new column after importing them so positional INSERT statements remain compatible.
+ALTER TABLE `ai_system_menu`
+  ADD COLUMN `is_target` tinyint UNSIGNED NULL DEFAULT 1 COMMENT '新窗口打开 (1是 2否)' AFTER `is_layout`;
 
 -- ----------------------------
 -- Table structure for ai_system_notice
