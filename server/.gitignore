@@ -1,7 +1,10 @@
 # Environment files
 .env
+.env.*
 *.env
 !.env.example
+!.env.development.example
+!.env.production.example
 
 # Runtime / install state
 runtime/

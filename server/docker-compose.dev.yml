@@ -1,0 +1,18 @@
+services:
+  server:
+    build:
+      context: .
+      args:
+        ALPINE_MIRROR: ${ALPINE_MIRROR:-https://mirrors.aliyun.com/alpine}
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+    image: gin-react-admin-server:dev
+    env_file:
+      - ./.env.development
+    ports:
+      - "8080:8080"
+    volumes:
+      - server_runtime_dev:/app/runtime
+    restart: unless-stopped
+
+volumes:
+  server_runtime_dev:

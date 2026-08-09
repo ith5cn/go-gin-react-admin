@@ -14,6 +14,7 @@ export interface InstallRedisConfig {
   addrs?: string
   password?: string
   db: number
+  tls?: boolean
 }
 
 export interface InstallPayload {

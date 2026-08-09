@@ -22,7 +22,7 @@ type RetryRequestConfig = AxiosRequestConfig & {
 
 const instance: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_APP_BASE_API || '/api',
-  timeout: 15000,
+  timeout: 15000 ,
   headers: { 'Content-Type': 'application/json;charset=utf-8' },
 })
 
@@ -64,7 +64,7 @@ const refreshAccessToken = async () => {
         { refresh_token: refreshToken },
         {
           baseURL: import.meta.env.VITE_APP_BASE_API || '/api',
-          timeout: 15000,
+          timeout: 15000 ,
           headers: { 'Content-Type': 'application/json;charset=utf-8' },
         },
       )

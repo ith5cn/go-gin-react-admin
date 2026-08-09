@@ -16,6 +16,7 @@ type RedisConfig struct {
 	Addrs    string `json:"addrs"`
 	Password string `json:"password"`
 	DB       int    `json:"db"`
+	TLS      bool   `json:"tls"`
 }
 
 // CheckRequest 是连通性检测接口入参。

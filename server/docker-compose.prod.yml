@@ -1,0 +1,13 @@
+services:
+  server:
+    image: ${SERVER_IMAGE:?SERVER_IMAGE is required. Use make prod or set SERVER_IMAGE explicitly.}
+    env_file:
+      - ./.env.production
+    ports:
+      - "8080:8080"
+    volumes:
+      - server_runtime_prod:/app/runtime
+    restart: unless-stopped
+
+volumes:
+  server_runtime_prod:

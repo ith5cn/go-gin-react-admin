@@ -21,6 +21,7 @@ type Redis struct {
 	Addrs    []string
 	Password string
 	DB       int
+	TLS      bool
 }
 
 // RedisConfig 从环境变量读取 Redis 配置。
@@ -37,6 +38,7 @@ func RedisConfig() Redis {
 		Addrs:    redisAddrs(),
 		Password: os.Getenv("REDIS_PASSWORD"),
 		DB:       redisDB(),
+		TLS:      redisTLS(),
 	}
 }
 
@@ -73,4 +75,9 @@ func redisDB() int {
 	}
 
 	return db
+}
+
+func redisTLS() bool {
+	value := strings.ToLower(os.Getenv("REDIS_TLS"))
+	return value == "true" || value == "1" || value == "yes"
 }

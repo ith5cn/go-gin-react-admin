@@ -3,9 +3,11 @@
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /src
+ARG GOPROXY=https://proxy.golang.org,direct
 ENV CGO_ENABLED=0 \
     GOOS=linux \
-    GOARCH=amd64
+    GOARCH=amd64 \
+    GOPROXY=${GOPROXY}
 
 COPY go.mod go.sum ./
 RUN go mod download
@@ -15,7 +17,9 @@ RUN go build -trimpath -ldflags="-s -w" -o /out/gin-react-admin .
 
 FROM alpine:3.22
 
-RUN apk add --no-cache ca-certificates tzdata \
+ARG ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine
+RUN printf '%s/v3.22/main\n%s/v3.22/community\n' "${ALPINE_MIRROR}" "${ALPINE_MIRROR}" > /etc/apk/repositories \
+    && apk add --no-cache ca-certificates tzdata \
     && addgroup -S app \
     && adduser -S -G app app
 

@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -213,16 +214,23 @@ func pingRedis(cfg installModel.RedisConfig) error {
 
 func redisClient(cfg installModel.RedisConfig) redis.UniversalClient {
 	mode := strings.ToLower(strings.TrimSpace(cfg.Mode))
+	var tlsConfig *tls.Config
+	if cfg.TLS {
+		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+
 	if mode == "cluster" {
 		return redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:    splitCSV(cfg.Addrs),
-			Password: cfg.Password,
+			Addrs:     splitCSV(cfg.Addrs),
+			Password:  cfg.Password,
+			TLSConfig: tlsConfig,
 		})
 	}
 	return redis.NewClient(&redis.Options{
-		Addr:     defaultString(cfg.Addr, "127.0.0.1:6379"),
-		Password: cfg.Password,
-		DB:       cfg.DB,
+		Addr:      defaultString(cfg.Addr, "127.0.0.1:6379"),
+		Password:  cfg.Password,
+		DB:        cfg.DB,
+		TLSConfig: tlsConfig,
 	})
 }
 
@@ -258,6 +266,7 @@ func writeEnv(req installModel.InstallRequest) error {
 		"REDIS_ADDRS":              req.Redis.Addrs,
 		"REDIS_PASSWORD":           req.Redis.Password,
 		"REDIS_DB":                 strconv.Itoa(req.Redis.DB),
+		"REDIS_TLS":                strconv.FormatBool(req.Redis.TLS),
 		"JWT_SECRET":               req.JWTSecret,
 	}
 	content, _ := os.ReadFile(envFilePath)
@@ -309,6 +318,7 @@ func applyEnv(req installModel.InstallRequest) {
 	_ = os.Setenv("REDIS_ADDRS", req.Redis.Addrs)
 	_ = os.Setenv("REDIS_PASSWORD", req.Redis.Password)
 	_ = os.Setenv("REDIS_DB", strconv.Itoa(req.Redis.DB))
+	_ = os.Setenv("REDIS_TLS", strconv.FormatBool(req.Redis.TLS))
 	_ = os.Setenv("JWT_SECRET", req.JWTSecret)
 }
 

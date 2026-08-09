@@ -19,6 +19,7 @@ const defaultValues: InstallPayload = {
     addrs: '',
     password: '',
     db: 0,
+    tls: false,
   },
   sqlFiles: [],
   jwtSecret: 'gin-react-admin-change-me',
@@ -159,6 +160,9 @@ const Install = () => {
                 </Form.Item>
                 <Form.Item name={['redis', 'password']} label="密码">
                   <Input.Password />
+                </Form.Item>
+                <Form.Item name={['redis', 'tls']} valuePropName="checked">
+                  <Checkbox>启用 TLS</Checkbox>
                 </Form.Item>
               </section>
           </div>

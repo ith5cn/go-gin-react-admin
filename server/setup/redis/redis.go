@@ -2,6 +2,7 @@ package redisInit
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"server/config"
 
@@ -39,16 +40,23 @@ func (r *_redis) Get() redis.UniversalClient {
 // newClient 屏蔽单例和集群 Redis 的创建差异。
 // 注意：集群模式不配置 DB，因为 Redis Cluster 不支持 SELECT DB。
 func newClient(redisConfig config.Redis) redis.UniversalClient {
+	var tlsConfig *tls.Config
+	if redisConfig.TLS {
+		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+
 	if redisConfig.Mode == config.RedisModeCluster {
 		return redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:    redisConfig.Addrs,
-			Password: redisConfig.Password,
+			Addrs:     redisConfig.Addrs,
+			Password:  redisConfig.Password,
+			TLSConfig: tlsConfig,
 		})
 	}
 
 	return redis.NewClient(&redis.Options{
-		Addr:     redisConfig.Addr,
-		Password: redisConfig.Password,
-		DB:       redisConfig.DB,
+		Addr:      redisConfig.Addr,
+		Password:  redisConfig.Password,
+		DB:        redisConfig.DB,
+		TLSConfig: tlsConfig,
 	})
 }
