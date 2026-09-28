@@ -6,13 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strings"
+
 	"server/config"
 	commonResponse "server/model/common/response"
 	systemModel "server/model/system"
 	systemRequest "server/model/system/request"
 	gormInit "server/setup/gorm"
-	"sort"
-	"strings"
 
 	"gorm.io/gorm"
 )
@@ -273,6 +274,19 @@ func CodegenGenerate(id string) (map[string]interface{}, error) {
 		return nil, err
 	}
 	files := append(buildGoPreviewFiles(ctx), buildFrontendPreviewFiles(ctx)...)
+	// Check every target before writing anything, so a hand-owned file cannot be partially overwritten.
+	if err := checkGeneratedTarget(filepath.Join("router", "generated", "register.go")); err != nil {
+		return nil, err
+	}
+	for _, file := range files {
+		root := "."
+		if file.Group == "frontend" {
+			root = resolveFrontendRoot(stringValue(ctx.Table.GeneratePath))
+		}
+		if err := checkGeneratedTarget(filepath.Join(root, file.Path)); err != nil {
+			return nil, err
+		}
+	}
 	written := make([]string, 0, len(files))
 	for _, file := range files {
 		root := "."
@@ -391,7 +405,11 @@ func refreshGeneratedRouteRegistryAt(routerRoot string) error {
 	}
 	builder.WriteString("}\n")
 
-	return os.WriteFile(filepath.Join(routerRoot, "generated", "register.go"), []byte(builder.String()), 0644)
+	path := filepath.Join(routerRoot, "generated", "register.go")
+	if err := checkGeneratedTarget(path); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(builder.String()), 0644)
 }
 
 // importCodegenTable 导入单张表：读表注释和字段元数据，落库为生成配置。
@@ -478,7 +496,7 @@ func codegenDetail(id string) (systemModel.ToolGenerateTable, []systemModel.Tool
 	return table, columns, err
 }
 
-// codegenSourceDB 按数据源名称拿连接：默认当前库，其他名称动态建连接。
+// codegenSourceDB 只使用启动时注册的连接，避免每次预览都创建连接池。
 func codegenSourceDB(source string) (*gorm.DB, string, error) {
 	if source == "" || source == config.MysqlAISystem {
 		db, err := systemDB()
@@ -488,7 +506,7 @@ func codegenSourceDB(source string) (*gorm.DB, string, error) {
 		name, err := databaseName(db)
 		return db, name, err
 	}
-	db, err := gormInit.Gorm.InitializeByName(source)
+	db, err := gormInit.Gorm.Get(source)
 	if err != nil {
 		return nil, "", err
 	}
@@ -813,4 +831,19 @@ func isSystemColumnName(columnName string) bool {
 }
 func isNumericBaseType(baseType string) bool {
 	return regexp.MustCompile(`^(tinyint|smallint|mediumint|int|bigint|decimal|float|double)`).MatchString(strings.ToLower(baseType))
+}
+
+// checkGeneratedTarget refuses files whose generation marker was removed on handoff to business ownership.
+func checkGeneratedTarget(path string) error {
+	content, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if strings.HasPrefix(string(content), codegenFileMarker) || strings.HasPrefix(string(content), "// 本文件由代码生成器生成，重新生成会覆盖手工修改。") {
+		return nil
+	}
+	return NewBizError("生成目标包含手工维护文件，请先预览并迁移到独立文件，禁止直接覆盖")
 }

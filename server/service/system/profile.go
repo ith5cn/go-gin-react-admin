@@ -61,7 +61,7 @@ func ChangePassword(userID uint, oldPassword, newPassword string) error {
 		return ErrOldPasswordWrong
 	}
 
-	return SetUserPassword(uintToString(userID), newPassword)
+	return SetUserPassword(userID, uintToString(userID), newPassword)
 }
 
 // uintToString 是 parseUint 的反向小工具。

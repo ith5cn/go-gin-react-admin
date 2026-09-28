@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"server/database/migrations"
 	installModel "server/model/install"
 	gormInit "server/setup/gorm"
 	redisInit "server/setup/redis"
@@ -120,6 +121,16 @@ func Run(req installModel.InstallRequest) (map[string]interface{}, error) {
 		return nil, err
 	}
 	applyEnv(req)
+	db, err := gormInit.Gorm.Initialize()
+	if err != nil {
+		return nil, err
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		defer sqlDB.Close()
+	}
+	if err := migrations.Up(db); err != nil {
+		return nil, err
+	}
 	if err := gormInit.Gorm.InitializeAll(); err != nil {
 		return nil, err
 	}

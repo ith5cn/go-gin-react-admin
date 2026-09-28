@@ -1,4 +1,4 @@
-package gormInit
+package migrations
 
 import (
 	"strconv"
@@ -7,10 +7,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// ensureAISystemSchema 在启动时做轻量 schema 自检/补齐：
-// 给早期版本缺失的列补 ALTER，并确保代码生成器的两张配置表存在。
-// 项目暂未引入 migration 工具，这里相当于最简版的向前兼容迁移。
-func ensureAISystemSchema(db *gorm.DB) error {
+// upgradeLegacySchema 固化迁移前的兼容升级；发布后不再修改，新增变更使用新版本。
+func upgradeLegacySchema(db *gorm.DB) error {
 	if !db.Migrator().HasColumn("ai_system_config_group", "sort") {
 		if err := db.Exec("ALTER TABLE `ai_system_config_group` ADD COLUMN `sort` smallint unsigned NOT NULL DEFAULT 0 COMMENT '排序' AFTER `code`").Error; err != nil {
 			return err

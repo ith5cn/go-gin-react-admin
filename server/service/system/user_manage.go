@@ -1,6 +1,9 @@
 package system
 
 import (
+	"fmt"
+	"strings"
+
 	commonResponse "server/model/common/response"
 	systemModel "server/model/system"
 	systemRequest "server/model/system/request"
@@ -55,83 +58,119 @@ func UserList(operatorID uint, query map[string]string) (*commonResponse.PageRes
 	return &commonResponse.PageResult{List: users, Total: total}, nil
 }
 
-// CreateUser 创建用户：密码必填并做 bcrypt 加密，可同时绑定角色。
-func CreateUser(payload systemRequest.UserPayload) (*systemModel.AISystemUser, error) {
+// CreateUser atomically creates a user and role bindings within the operator's department scope.
+func CreateUser(operatorID uint, payload systemRequest.UserPayload) (*systemModel.AISystemUser, error) {
 	db, err := systemDB()
 	if err != nil {
 		return nil, err
 	}
-
 	if payload.Password == nil || *payload.Password == "" {
 		return nil, ErrPasswordRequired
 	}
-	// 数据库永远只存 bcrypt 哈希，绝不存明文密码。
+	if payload.Username == nil || strings.TrimSpace(*payload.Username) == "" {
+		return nil, NewBizError("用户名不能为空")
+	}
 	hash, err := hashPassword(*payload.Password)
 	if err != nil {
 		return nil, err
 	}
-
-	data := userPayloadData(payload)
-	data["password"] = hash
-	setDefaultTimes(data, true)
-
-	if err := db.Model(&systemModel.AISystemUser{}).Create(data).Error; err != nil {
-		return nil, err
-	}
-
-	// 用 map 方式 Create 拿不到自增 ID，这里按唯一的 username 回查一次。
 	var user systemModel.AISystemUser
-	if err := db.Where("username = ?", data["username"]).First(&user).Error; err != nil {
+	err = db.Transaction(func(tx *gorm.DB) error {
+		scope, err := userDataScope(tx, operatorID)
+		if err != nil {
+			return err
+		}
+		if err := authorizeDepartment(scope, payload.DeptID); err != nil {
+			return err
+		}
+		if err := authorizeRoles(tx, operatorID, payload.Roles); err != nil {
+			return err
+		}
+		data := userPayloadData(payload)
+		data["password"] = hash
+		setDefaultTimes(data, true)
+		if err := tx.Model(&systemModel.AISystemUser{}).Create(data).Error; err != nil {
+			return err
+		}
+		id, ok := data["id"]
+		if !ok {
+			return fmt.Errorf("user insert did not return primary key")
+		}
+		if err := tx.Where("id = ?", id).First(&user).Error; err != nil {
+			return err
+		}
+		return bindUserRoles(tx, user.ID, payload.Roles)
+	})
+	if err != nil {
 		return nil, err
 	}
-	roles := payload.Roles
-	if len(roles) > 0 {
-		if err := BindUserRoles(user.ID, roles); err != nil {
-			return nil, err
-		}
-	}
-	user.Roles = roles
+	user.Roles = payload.Roles
 	return &user, nil
 }
 
-// UpdateUser 更新用户资料并按需重绑角色（部分更新语义：nil 字段不改动）。
-func UpdateUser(id string, payload systemRequest.UserPayload) (*systemModel.AISystemUser, error) {
+// UpdateUser checks the existing target and destination department before any write.
+func UpdateUser(operatorID uint, id string, payload systemRequest.UserPayload) (*systemModel.AISystemUser, error) {
 	db, err := systemDB()
 	if err != nil {
 		return nil, err
 	}
-
-	// 更新接口不改密码，密码走独立的 set-password 接口。
-	data := userPayloadData(payload)
-	setDefaultTimes(data, false)
-	if len(data) > 0 {
-		if err := db.Model(&systemModel.AISystemUser{}).Where("id = ?", id).Updates(data).Error; err != nil {
-			return nil, err
+	var result systemModel.AISystemUser
+	err = withUserWrite(db, operatorID, id, func(tx *gorm.DB, scope *DataScope, user *systemModel.AISystemUser) error {
+		if payload.DeptID != nil && (user.DeptID == nil || *payload.DeptID != *user.DeptID) {
+			if err := authorizeDepartment(scope, payload.DeptID); err != nil {
+				return err
+			}
 		}
-	}
-	// Roles 为 nil 表示前端未提交角色字段，保持原绑定不动；
-	// 空数组 [] 则表示"清空全部角色"，两者语义不同。
-	if payload.Roles != nil {
-		if err := BindUserRolesStringID(id, payload.Roles); err != nil {
-			return nil, err
+		if payload.Roles != nil {
+			if err := authorizeRoles(tx, operatorID, payload.Roles); err != nil {
+				return err
+			}
 		}
-	}
-
-	var user systemModel.AISystemUser
-	if err := db.Where("id = ?", id).First(&user).Error; err != nil {
+		data := userPayloadData(payload)
+		setDefaultTimes(data, false)
+		if err := tx.Model(user).Updates(data).Error; err != nil {
+			return err
+		}
+		if payload.Roles != nil {
+			if err := bindUserRoles(tx, user.ID, payload.Roles); err != nil {
+				return err
+			}
+		}
+		if err := tx.First(&result, user.ID).Error; err != nil {
+			return err
+		}
+		var roles []systemModel.AISystemUserRole
+		if err := tx.Where("user_id = ?", user.ID).Find(&roles).Error; err != nil {
+			return err
+		}
+		result.Roles = make([]uint, 0, len(roles))
+		for _, role := range roles {
+			result.Roles = append(result.Roles, role.RoleID)
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
-	user.Roles, _ = RoleIDsByUserID(user.ID)
-	return &user, nil
+	return &result, nil
 }
 
-// DeleteUser 按 ID 删除用户。
-func DeleteUser(id string) error {
-	return deleteByID(&systemModel.AISystemUser{}, id)
+// DeleteUser deletes the scoped target and its role bindings in one transaction.
+func DeleteUser(operatorID uint, id string) error {
+	db, err := systemDB()
+	if err != nil {
+		return err
+	}
+	return withUserWrite(db, operatorID, id, func(tx *gorm.DB, _ *DataScope, user *systemModel.AISystemUser) error {
+		if err := tx.Where("user_id = ?", user.ID).Delete(&systemModel.AISystemUserRole{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(user).Error
+	})
 }
 
-// SetUserPassword 管理员重置指定用户的密码。
-func SetUserPassword(id string, password string) error {
+// SetUserPassword resets a password only after locking an authorized target.
+func SetUserPassword(operatorID uint, id, password string) error {
 	if password == "" {
 		return ErrPasswordRequired
 	}
@@ -143,7 +182,9 @@ func SetUserPassword(id string, password string) error {
 	if err != nil {
 		return err
 	}
-	return db.Model(&systemModel.AISystemUser{}).Where("id = ?", id).Updates(map[string]interface{}{"password": hash, "update_time": gorm.Expr("NOW()")}).Error
+	return withUserWrite(db, operatorID, id, func(tx *gorm.DB, _ *DataScope, user *systemModel.AISystemUser) error {
+		return tx.Model(user).Updates(map[string]interface{}{"password": hash, "update_time": gorm.Expr("NOW()")}).Error
+	})
 }
 
 // UserAuthList 返回启用用户的 {label, value} 下拉选项，label 优先取昵称。
@@ -168,35 +209,36 @@ func UserAuthList() ([]map[string]interface{}, error) {
 	return result, nil
 }
 
-// BindUserRolesStringID 是 BindUserRoles 的字符串 ID 版本，方便 handler 直接传路径参数。
-func BindUserRolesStringID(userID string, roleIDs []uint) error {
-	id, err := parseUint(userID)
-	if err != nil {
-		return err
-	}
-	return BindUserRoles(id, roleIDs)
-}
-
-// BindUserRoles 重设用户的角色绑定。
-// "先删后插"必须包在一个事务里：任何一步失败整体回滚，
-// 否则可能出现旧绑定删了、新绑定没插上的中间状态。
-// db.Transaction 会在回调返回 error 时自动 Rollback，返回 nil 时自动 Commit。
-func BindUserRoles(userID uint, roleIDs []uint) error {
+// BindUserRolesStringID is the authenticated administrative role assignment entry point.
+func BindUserRolesStringID(operatorID uint, userID string, roleIDs []uint) error {
 	db, err := systemDB()
 	if err != nil {
 		return err
 	}
-	return db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("user_id = ?", userID).Delete(&systemModel.AISystemUserRole{}).Error; err != nil {
+	return withUserWrite(db, operatorID, userID, func(tx *gorm.DB, _ *DataScope, user *systemModel.AISystemUser) error {
+		if err := authorizeRoles(tx, operatorID, roleIDs); err != nil {
 			return err
 		}
-		for _, roleID := range roleIDs {
-			if err := tx.Create(&systemModel.AISystemUserRole{UserID: userID, RoleID: roleID}).Error; err != nil {
-				return err
-			}
-		}
-		return nil
+		return bindUserRoles(tx, user.ID, roleIDs)
 	})
+}
+
+// bindUserRoles participates in the caller's transaction; it is never an authorization entry point.
+func bindUserRoles(tx *gorm.DB, userID uint, roleIDs []uint) error {
+	if err := tx.Where("user_id = ?", userID).Delete(&systemModel.AISystemUserRole{}).Error; err != nil {
+		return err
+	}
+	seen := map[uint]bool{}
+	for _, roleID := range roleIDs {
+		if seen[roleID] {
+			continue
+		}
+		seen[roleID] = true
+		if err := tx.Create(&systemModel.AISystemUserRole{UserID: userID, RoleID: roleID}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // RoleIDsByUserID 查询用户当前绑定的角色 ID 列表（走 user-role 中间表）。

@@ -2,6 +2,7 @@ package system
 
 import (
 	"errors"
+
 	systemModel "server/model/system"
 	systemResponse "server/model/system/response"
 	gormInit "server/setup/gorm"
@@ -63,7 +64,7 @@ func loginInternal(userName string, password string) (*utils.TokenPair, error) {
 
 	// 接口入参仍叫 user_name，数据库字段是 username，这里做一次语义映射。
 	var user systemModel.AISystemUser
-	if err := db.Where("username = ?", userName).First(&user).Error; err != nil {
+	if err := db.Where("username = ? AND delete_time IS NULL", userName).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrLoginFailed
 		}

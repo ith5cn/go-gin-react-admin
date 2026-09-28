@@ -1,6 +1,6 @@
 // 本文件由代码生成器生成，重新生成会覆盖手工修改。
 import { useRef } from "react";
-import { Col, Form, InputNumber, message } from "antd";
+import { Col, Form, Input, Select, message } from "antd";
 import Ith5Table, { type TableRef } from "@/components/ith5ui/ith5-table";
 import { aiArticleDeleteApi, aiArticleListApi } from "@/api/system/ai-article";
 import AiarticleEdit, { type AiarticleEditRef } from "./edit";
@@ -16,8 +16,13 @@ const AiarticleIndex = () => {
         searchFields={
           <>
             <Col span={6}>
+              <Form.Item name="title" label="文章标题">
+                <Input placeholder="请输入文章标题" allowClear />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
               <Form.Item name="status" label="状态">
-                <InputNumber style={{ width: "100%" }} placeholder="请输入状态" />
+                <Select allowClear options={[{"label":"正常","value":1},{"label":"停用","value":2}]} />
               </Form.Item>
             </Col>
           </>

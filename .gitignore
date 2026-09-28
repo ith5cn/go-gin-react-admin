@@ -1,1 +1,6 @@
 codex-review/
+
+# Local package-manager caches are not template source.
+.pnpm-store/
+
+docs/

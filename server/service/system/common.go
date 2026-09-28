@@ -7,16 +7,14 @@ import (
 	"strings"
 	"unicode"
 
+	querypkg "server/pkg/query"
 	gormInit "server/setup/gorm"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
-type PageQuery struct {
-	Page int
-	Size int
-}
+type PageQuery = querypkg.PageQuery
 
 // systemDB 获取 ai_system 库连接。
 // 所有 service 都从这里拿连接，未初始化时返回明确错误而不是 nil 指针。
@@ -29,15 +27,7 @@ func systemDB() (*gorm.DB, error) {
 
 // parsePage 解析分页参数，page 从 1 开始；size 兼容 limit 参数名，默认 10。
 func parsePage(query map[string]string) PageQuery {
-	page := intFromQuery(query, "page", 1)
-	size := intFromQuery(query, "size", intFromQuery(query, "limit", 10))
-	if page <= 0 {
-		page = 1
-	}
-	if size <= 0 {
-		size = 10
-	}
-	return PageQuery{Page: page, Size: size}
+	return querypkg.ParsePage(query)
 }
 
 // intFromQuery 从查询参数取整数，缺失或非法时用默认值。

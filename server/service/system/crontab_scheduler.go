@@ -1,11 +1,13 @@
 package system
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -31,6 +33,7 @@ type crontabScheduler struct {
 	mu      sync.Mutex
 	cron    *cron.Cron
 	entries map[uint]cron.EntryID
+	tasks   []systemModel.AIToolCrontab
 }
 
 var scheduler = &crontabScheduler{entries: map[uint]cron.EntryID{}}
@@ -97,10 +100,14 @@ func StartCrontabScheduler() error {
 	scheduler.mu.Lock()
 	defer scheduler.mu.Unlock()
 	if scheduler.cron == nil {
-		scheduler.cron = cron.New(cron.WithParser(crontabParser))
-		scheduler.cron.Start()
+		scheduler.cron = cron.New(cron.WithParser(crontabParser), cron.WithChain(cron.SkipIfStillRunning(cron.DefaultLogger)))
+		_, _ = scheduler.cron.AddFunc("@every 10s", ReloadCrontabScheduler)
 	}
-	return scheduler.reloadLocked()
+	if err := scheduler.reloadLocked(); err != nil {
+		return err
+	}
+	scheduler.cron.Start()
+	return nil
 }
 
 // ReloadCrontabScheduler 重新装载全部任务，任务的增删改后调用。
@@ -117,21 +124,26 @@ func ReloadCrontabScheduler() {
 	}
 }
 
-// reloadLocked 清空现有 entry 后按数据库最新状态重新注册，调用方必须已持有锁。
+// reloadLocked 在成功读取且配置有变化时替换 entry；调用方必须持锁。
 func (s *crontabScheduler) reloadLocked() error {
-	for _, entryID := range s.entries {
-		s.cron.Remove(entryID)
-	}
-	s.entries = map[uint]cron.EntryID{}
-
 	db, err := systemDB()
 	if err != nil {
 		return err
 	}
 	var tasks []systemModel.AIToolCrontab
-	if err := softDelete(db).Where("status = ?", 1).Find(&tasks).Error; err != nil {
+	if err := softDelete(db).Where("status = ?", 1).Order("id ASC").Find(&tasks).Error; err != nil {
 		return err
 	}
+
+	if reflect.DeepEqual(s.tasks, tasks) {
+		return nil
+	}
+	for _, entryID := range s.entries {
+		s.cron.Remove(entryID)
+	}
+	s.entries = map[uint]cron.EntryID{}
+
+	s.tasks = tasks
 
 	for _, task := range tasks {
 		if task.Rule == nil || *task.Rule == "" {
@@ -335,4 +347,24 @@ func cleanExpiredLogs(parameter string) error {
 		return err
 	}
 	return db.Where("login_time < ?", cutoff).Delete(&systemModel.AISystemLoginLog{}).Error
+}
+
+// StopCrontabScheduler stops scheduling and waits for running tasks within the shutdown deadline.
+func StopCrontabScheduler(ctx context.Context) error {
+	scheduler.mu.Lock()
+	if scheduler.cron == nil {
+		scheduler.mu.Unlock()
+		return nil
+	}
+	stopped := scheduler.cron.Stop()
+	scheduler.cron = nil
+	scheduler.entries = map[uint]cron.EntryID{}
+	scheduler.tasks = nil
+	scheduler.mu.Unlock()
+	select {
+	case <-stopped.Done():
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

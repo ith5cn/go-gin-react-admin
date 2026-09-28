@@ -586,7 +586,7 @@ func CreatePost(...) (*AISystemPost, error) {
 | 4 | 本部门及以下 | 部门树在内存里展开后代，`dept_id IN (...)` |
 | 5 | 仅本人 | `id = 我自己` |
 
-实现在 `service/system/datascope.go`：`UserDataScope` 算出操作者的可见范围（多角色取**并集**，最宽松的生效；任何一个角色是"全部"就直接放行），`applyUserDataScope` 把范围拼成 GORM 条件注入查询。目前套在用户列表（`UserList`）上，其他列表要接入时复用这两个函数即可。注意 handler 传的是 **JWT 里的当前用户 ID**，绝不信前端传参——和个人中心同一条纪律。
+实现在 `service/system/datascope.go`：`UserDataScope` 算出操作者的可见范围（多角色取**并集**，最宽松的生效；任何一个角色是"全部"就直接放行），`applyUserDataScope` 把范围拼成 GORM 条件注入查询。用户列表和导出复用该过滤器；用户写操作通过 `withUserWrite` 在事务内计算范围、锁定目标，变更部门时同时校验新部门。其他业务模块需显式接入自己的范围规则。注意 handler 传的是 **JWT 里的当前用户 ID**，绝不信前端传参——和个人中心同一条纪律。
 
 > **面试常问**："功能权限和数据权限的区别？"（功能权限=接口能不能调，数据权限=行级可见性；RuoYi 等后台框架的 dataScope 就是行级过滤的角色化配置）
 

@@ -1,13 +1,54 @@
 package system
 
 import (
+	"errors"
 	"reflect"
 	"sort"
 	"testing"
 
 	systemModel "server/model/system"
 	systemRequest "server/model/system/request"
+
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/robfig/cron/v3"
 )
+
+func TestSchedulerPollPreservesUnchangedEntriesAndSurvivesReadFailure(t *testing.T) {
+	_, mock := userTestDB(t)
+	s := &crontabScheduler{cron: cron.New(cron.WithParser(crontabParser)), entries: map[uint]cron.EntryID{}}
+	rows := func() *sqlmock.Rows {
+		return sqlmock.NewRows([]string{"id", "rule", "task_style", "target", "status"}).AddRow(1, "*/5 * * * *", 1, "system/clean-logs", 1)
+	}
+	mock.ExpectQuery("SELECT .*ai_tool_crontab").WithArgs(1).WillReturnRows(rows())
+	if err := s.reloadLocked(); err != nil {
+		t.Fatal(err)
+	}
+	id := s.entries[1]
+	if id == 0 {
+		t.Fatal("task not registered")
+	}
+	mock.ExpectQuery("SELECT .*ai_tool_crontab").WithArgs(1).WillReturnRows(rows())
+	if err := s.reloadLocked(); err != nil {
+		t.Fatal(err)
+	}
+	if s.entries[1] != id {
+		t.Fatal("unchanged polling reset the schedule")
+	}
+	mock.ExpectQuery("SELECT .*ai_tool_crontab").WithArgs(1).WillReturnError(errors.New("database unavailable"))
+	if err := s.reloadLocked(); err == nil {
+		t.Fatal("read error lost")
+	}
+	if s.entries[1] != id {
+		t.Fatal("read failure removed live task")
+	}
+	mock.ExpectQuery("SELECT .*ai_tool_crontab").WithArgs(1).WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	if err := s.reloadLocked(); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.entries) != 0 {
+		t.Fatal("disabled task still registered")
+	}
+}
 
 func TestCrontabInternalTasksSortedAndMetadata(t *testing.T) {
 	const (

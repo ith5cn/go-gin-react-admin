@@ -168,7 +168,7 @@ func TestRenderGoModelNullableTypes(t *testing.T) {
 
 func TestRenderGoServiceSoftDelete(t *testing.T) {
 	soft := renderGoService(fullViewTypeContext(1, 1, true))
-	if !strings.Contains(soft, `SoftDeleteRecord("demo_article", id)`) {
+	if !strings.Contains(soft, `SoftDeleteRecord(db, "demo_article", id)`) {
 		t.Fatalf("软删除表应使用 SoftDeleteRecord:\n%s", soft)
 	}
 	if !strings.Contains(soft, ", true)") {
@@ -176,7 +176,7 @@ func TestRenderGoServiceSoftDelete(t *testing.T) {
 	}
 
 	hard := renderGoService(fullViewTypeContext(2, 1, false))
-	if !strings.Contains(hard, "DeleteRecord(&generatedModel.DemoArticle{}, id)") {
+	if !strings.Contains(hard, "DeleteRecord(db, &generatedModel.DemoArticle{}, id)") {
 		t.Fatalf("非软删除表应使用 DeleteRecord:\n%s", hard)
 	}
 	if !strings.Contains(hard, ", false)") {

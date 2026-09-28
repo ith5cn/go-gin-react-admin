@@ -26,6 +26,13 @@ func UserDataScope(userID uint) (*DataScope, error) {
 		return nil, err
 	}
 
+	return userDataScope(db, userID)
+}
+
+func userDataScope(db *gorm.DB, userID uint) (*DataScope, error) {
+	if userID == 0 {
+		return nil, ErrDataScopeDenied
+	}
 	var roles []systemModel.AISystemRole
 	if err := db.Table("ai_system_role AS r").
 		Select("r.id, r.code, r.data_scope").
@@ -94,7 +101,10 @@ func UserDataScope(userID uint) (*DataScope, error) {
 // applyUserDataScope 把数据范围套到用户表查询上：
 // 可见部门内的用户 + 自己本人（自己的数据永远可见）。
 func applyUserDataScope(db *gorm.DB, scope *DataScope, selfUserID uint) *gorm.DB {
-	if scope == nil || scope.All {
+	if scope == nil {
+		return db.Where("1 = 0")
+	}
+	if scope.All {
 		return db
 	}
 	if len(scope.DeptIDs) == 0 {

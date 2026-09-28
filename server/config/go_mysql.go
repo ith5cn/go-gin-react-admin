@@ -77,17 +77,18 @@ func DsnByName(name string) string {
 }
 
 // MysqlByName 根据连接名读取对应环境变量。
-// 未知连接名会回退到 ai_system，避免因为传错名称直接拿到空配置。
+// 命名业务库使用 <NAME>_MYSQL_*，不复用系统库凭据。
 func MysqlByName(name string) Mysql {
 	switch name {
 	case MysqlAISystem:
 		return mysqlFromEnv("AI_SYSTEM_MYSQL", MysqlAISystem)
 	default:
-		mysql := mysqlFromEnv("AI_SYSTEM_MYSQL", MysqlAISystem)
-		if strings.TrimSpace(name) != "" {
-			mysql.Dbname = strings.TrimSpace(name)
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return mysqlFromEnv("AI_SYSTEM_MYSQL", MysqlAISystem)
 		}
-		return mysql
+		prefix := strings.ToUpper(strings.ReplaceAll(name, "-", "_")) + "_MYSQL"
+		return mysqlFromEnv(prefix, name)
 	}
 }
 

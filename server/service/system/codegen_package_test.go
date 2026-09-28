@@ -56,7 +56,7 @@ func TestRenderGoFilesUseConfiguredPackage(t *testing.T) {
 
 	checks := map[string][]string{
 		renderGoModel(customCtx):   {"package reports"},
-		renderGoService(customCtx): {"package reports", `"server/model/reports"`, `"server/service/system"`},
+		renderGoService(customCtx): {"package reports", `"server/model/reports"`, `"server/pkg/query"`, `db *gorm.DB`},
 		renderGoAPI(customCtx):     {"package reports", `"server/api/system"`, `"server/service/reports"`},
 		renderGoRouter(customCtx):  {"package reports", `"server/api/reports"`},
 	}
@@ -157,4 +157,39 @@ func TestCleanupLegacyGeneratedFilesOnlyRemovesGeneratedFiles(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, legacyPaths[3])); err != nil {
 		t.Fatalf("手写同名文件不应删除: %v", err)
 	}
+}
+
+func TestGeneratedTargetsProtectHandOwnedFiles(t *testing.T) {
+	for _, tc := range []struct {
+		name, content string
+		allowed       bool
+	}{
+		{"generated", codegenFileMarker + "\npackage sample", true},
+		{"frontend", "// 本文件由代码生成器生成，重新生成会覆盖手工修改。\nexport {}", true},
+		{"hand-owned", "package sample\n// custom business rules", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "sample.go")
+			if err := os.WriteFile(path, []byte(tc.content), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if got := checkGeneratedTarget(path) == nil; got != tc.allowed {
+				t.Fatalf("allowed=%v", got)
+			}
+		})
+	}
+}
+
+func TestGeneratedAPIUsesConfiguredDatabase(t *testing.T) {
+	ctx := fullViewTypeContext(1, 1, true)
+	source := "legacy_ads"
+	ctx.Table.Source = &source
+	content := renderGoAPI(ctx)
+	if !strings.Contains(content, `gormInit.Gorm.Get("legacy_ads")`) {
+		t.Fatalf("source lost: %s", content)
+	}
+	if strings.Contains(renderGoService(ctx), `"server/service/system"`) {
+		t.Fatal("business service still depends on system")
+	}
+	mustParseGo(t, "api.go", content)
 }

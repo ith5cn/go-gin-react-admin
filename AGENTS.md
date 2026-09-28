@@ -1,17 +1,17 @@
 # gin-react-admin
 
-Go + React 全栈后台管理系统。后端 Gin/GORM/Redis/JWT，前端 React 18/Vite/Ant Design/Zustand。
+Go + React 全栈后台管理系统。后端 Gin/GORM/Redis/JWT，前端 React 19/Vite/Ant Design/Zustand。
 
 ## 技术栈
 
 - 后端: Go 1.25, Gin, GORM (MySQL), Redis, JWT (golang-jwt/v5), Zap
-- 前端: React 18, Vite, TypeScript, Ant Design 5, Zustand, React Router 6, Tailwind CSS
+- 前端: React 19, Vite, TypeScript, Ant Design 6, Zustand, React Router 7, Tailwind CSS
 - 包管理: 后端 `go mod`，前端 `pnpm`
 
 ## 常用命令
 
 ### 后端（server/）
-- 运行: `go run main.go`（需先配置 `.env`）
+- 运行: `go run main.go`（首次安装走向导，已安装项目启动前运行迁移）
 - 测试: `go test ./...`
 - 环境变量: 从 `.env` 加载，参考 `config/go_*.go` 中的 `envOrDefault` 调用
 
@@ -45,15 +45,15 @@ gin-react-admin/
 
 ## 后端环境变量（server/.env）
 
-关键变量（无 `.env.example`，需手动创建）：
+关键变量（参考 `server/.env.example`）：
 ```
 SERVER_ADDR=:8080
 ROUTER_PREFIX=/api/v1
-DB_AI_SYSTEM_HOST=localhost
-DB_AI_SYSTEM_PORT=3306
-DB_AI_SYSTEM_USER=root
-DB_AI_SYSTEM_PASSWORD=your_password
-DB_AI_SYSTEM_DBNAME=ai_system
+AI_SYSTEM_MYSQL_HOST=localhost
+AI_SYSTEM_MYSQL_PORT=3306
+AI_SYSTEM_MYSQL_USER=root
+AI_SYSTEM_MYSQL_PASSWORD=your_password
+AI_SYSTEM_MYSQL_DB=ai_system
 REDIS_ADDR=localhost:6379
 JWT_SECRET=your_secret_here
 JWT_ACCESS_EXPIRES_MINUTE=120
@@ -63,7 +63,10 @@ JWT_LOGIN_MODE=multi
 
 ## 项目现状与约束
 
-- **无测试**：server/ 和 web/src/ 均无测试文件；新功能建议补充 service 层单测
+- **测试**：后端覆盖认证、权限、事务、迁移、调度及代码生成；前端尚无单测框架，构建包含类型检查，ESLint 有存量问题。
+- **数据库迁移**：`go run ./cmd/migrate status|up`，HTTP 启动只读校验；升级指南见 `docs/template-upgrade.md`。
+- **调度**：`CRON_ENABLED` 默认关闭，同一数据库仅一个实例显式启用；业务任务必须幂等。
+- **模块边界**：新业务 Service 显式接收 `*gorm.DB`，公共 CRUD 在 `pkg/query`，生成/手写约定见 `docs/php-migration.md`。
 - **动态路由**：前端菜单和路由由后端 `/system/user` 接口下发，首次加载由 `Layout` 统一初始化，不要在登录页重复调用 `initUserContext`
 - **JWT + Redis 双重校验**：access token 在 Redis 中存 jti；Redis 不可用或 token 被撤销时，所有认证接口会 401，前端拦截器会硬跳回 `/login`
 

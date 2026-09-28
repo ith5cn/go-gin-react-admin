@@ -37,6 +37,10 @@ func UserImportTemplate(c *gin.Context) {
 
 // ImportUsers 从上传的 Excel 导入用户。
 func ImportUsers(c *gin.Context) {
+	operatorID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		successOrFail(c, nil, systemService.ErrImportNotExcel)
@@ -49,7 +53,7 @@ func ImportUsers(c *gin.Context) {
 	}
 	defer file.Close()
 
-	result, importErr := systemService.ImportUsersExcel(file)
+	result, importErr := systemService.ImportUsersExcel(operatorID, file)
 	successOrFail(c, result, importErr)
 }
 

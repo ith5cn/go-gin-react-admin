@@ -3,6 +3,7 @@ package system
 import (
 	"errors"
 	"net/http"
+
 	"server/model/common/code"
 	"server/model/common/response"
 	systemService "server/service/system"
@@ -50,6 +51,10 @@ func successOrFail(c *gin.Context, data interface{}, err error) {
 		return
 	}
 
+	if errors.Is(err, systemService.ErrDataScopeDenied) || errors.Is(err, systemService.ErrRoleAssignmentDenied) {
+		response.FailWithHTTP(c, http.StatusForbidden, code.PermissionDenied)
+		return
+	}
 	var bizErr *systemService.BizError
 	if errors.As(err, &bizErr) {
 		response.Fail(c, code.OperationFailed, bizErr.Error())

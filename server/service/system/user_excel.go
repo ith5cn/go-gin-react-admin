@@ -113,7 +113,7 @@ func UserImportTemplateExcel() ([]byte, error) {
 
 // ImportUsersExcel 从 xlsx 导入用户，逐行处理：单行失败不中断整个导入，
 // 最后汇总成功/失败数和失败原因。全部失败时返回业务错误（前端能直接看到原因）。
-func ImportUsersExcel(reader io.Reader) (*UserImportResult, error) {
+func ImportUsersExcel(operatorID uint, reader io.Reader) (*UserImportResult, error) {
 	file, err := excelize.OpenReader(reader)
 	if err != nil {
 		return nil, ErrImportNotExcel
@@ -142,7 +142,13 @@ func ImportUsersExcel(reader io.Reader) (*UserImportResult, error) {
 	result := &UserImportResult{Errors: []string{}}
 	for index, row := range rows[1:] {
 		lineNo := index + 2
-		if err := importUserRow(db, row, passwordHash); err != nil {
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			scope, err := userDataScope(tx, operatorID)
+			if err != nil {
+				return err
+			}
+			return importUserRow(tx, scope, row, passwordHash)
+		}); err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, fmt.Sprintf("第%d行: %s", lineNo, err.Error()))
 			continue
@@ -157,18 +163,10 @@ func ImportUsersExcel(reader io.Reader) (*UserImportResult, error) {
 }
 
 // importUserRow 处理一行导入数据：列顺序与 userExcelHeaders 一致。
-func importUserRow(db *gorm.DB, row []string, passwordHash string) error {
+func importUserRow(db *gorm.DB, scope *DataScope, row []string, passwordHash string) error {
 	username := strings.TrimSpace(cellAt(row, 0))
 	if username == "" {
 		return fmt.Errorf("用户名为空")
-	}
-
-	var count int64
-	if err := db.Model(&systemModel.AISystemUser{}).Where("username = ?", username).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return fmt.Errorf("用户名 %s 已存在", username)
 	}
 
 	data := map[string]interface{}{
@@ -198,6 +196,21 @@ func importUserRow(db *gorm.DB, row []string, passwordHash string) error {
 			return fmt.Errorf("状态 %q 无效，只能是 1 或 2", statusRaw)
 		}
 		data["status"] = int16(status)
+	}
+
+	var dept *uint
+	if id, ok := data["dept_id"].(uint); ok {
+		dept = &id
+	}
+	if err := authorizeDepartment(scope, dept); err != nil {
+		return err
+	}
+	var count int64
+	if err := db.Model(&systemModel.AISystemUser{}).Where("username = ?", username).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return fmt.Errorf("用户名 %s 已存在", username)
 	}
 
 	setDefaultTimes(data, true)

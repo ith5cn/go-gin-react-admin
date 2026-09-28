@@ -17,6 +17,8 @@ func NewBizError(message string) *BizError {
 }
 
 var (
+	ErrDataScopeDenied       = NewBizError("无权操作该用户或目标部门")
+	ErrRoleAssignmentDenied  = NewBizError("不能授予自己未持有的角色")
 	ErrMenuHasChildren       = NewBizError("菜单下存在子菜单，无法删除")
 	ErrRoleHasChildren       = NewBizError("角色下存在子角色，无法删除")
 	ErrDeptHasChildren       = NewBizError("部门下存在子部门，无法删除")

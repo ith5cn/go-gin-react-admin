@@ -3,8 +3,22 @@ services:
     image: ${SERVER_IMAGE:?SERVER_IMAGE is required. Use make prod or set SERVER_IMAGE explicitly.}
     env_file:
       - ./.env.production
+    environment:
+      CRON_ENABLED: "false"
     ports:
       - "8080:8080"
+    volumes:
+      - server_runtime_prod:/app/runtime
+    restart: unless-stopped
+
+  scheduler:
+    profiles: [scheduler]
+    image: ${SERVER_IMAGE:?SERVER_IMAGE is required}
+    env_file:
+      - ./.env.production
+    environment:
+      CRON_ENABLED: "true"
+      SERVER_ADDR: "127.0.0.1:8081"
     volumes:
       - server_runtime_prod:/app/runtime
     restart: unless-stopped

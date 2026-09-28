@@ -14,6 +14,7 @@ RUN go mod download
 
 COPY . .
 RUN go build -trimpath -ldflags="-s -w" -o /out/gin-react-admin .
+RUN go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
 
 FROM alpine:3.22
 
@@ -25,6 +26,7 @@ RUN printf '%s/v3.22/main\n%s/v3.22/community\n' "${ALPINE_MIRROR}" "${ALPINE_MI
 
 WORKDIR /app
 COPY --from=builder /out/gin-react-admin ./gin-react-admin
+COPY --from=builder /out/migrate ./migrate
 COPY --from=builder /src/database ./database
 
 RUN mkdir -p runtime/uploads \

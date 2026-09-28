@@ -1,6 +1,14 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"server/config"
 	"server/router"
 	installService "server/service/install"
@@ -28,9 +36,27 @@ func main() {
 		loggerInit.Logger.Get().Fatal("setup initialize failed", zap.Error(err))
 	}
 
-	// 所有基础设施准备完成后再启动 HTTP 服务。
-	if err := router.NewRouter().Run(config.ServerAddr()); err != nil {
-		loggerInit.Logger.Get().Fatal("server run failed", zap.Error(err))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	httpServer := &http.Server{Addr: config.ServerAddr(), Handler: router.NewRouter(), ReadHeaderTimeout: 10 * time.Second}
+	httpStopped := make(chan struct{})
+	go func() {
+		defer close(httpStopped)
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = httpServer.Shutdown(shutdownCtx)
+	}()
+	runErr := httpServer.ListenAndServe()
+	stop()
+	<-httpStopped
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := systemService.StopCrontabScheduler(shutdownCtx); err != nil {
+		loggerInit.Logger.Get().Error("scheduler shutdown failed", zap.Error(err))
+	}
+	if runErr != nil && !errors.Is(runErr, http.ErrServerClosed) {
+		loggerInit.Logger.Get().Fatal("server run failed", zap.Error(runErr))
 	}
 }
 
@@ -43,6 +69,10 @@ func loadEnv() {
 // initSetup 是项目统一的初始化入口。
 // 后续如果接入 Gin 中间件、定时任务、消息队列等，也可以在这里继续扩展。
 func initSetup() error {
+	enabled, err := config.CronEnabled()
+	if err != nil {
+		return err
+	}
 	if !installService.Installed() {
 		loggerInit.Logger.Get().Info("install lock not found, skip business setup and enable install wizard")
 		return nil
@@ -57,5 +87,8 @@ func initSetup() error {
 	}
 
 	// 定时任务调度器依赖数据库（读任务配置），必须在 gorm 初始化之后启动。
-	return systemService.StartCrontabScheduler()
+	if enabled {
+		return systemService.StartCrontabScheduler()
+	}
+	return nil
 }
